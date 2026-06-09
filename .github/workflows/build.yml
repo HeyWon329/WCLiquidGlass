@@ -1,0 +1,114 @@
+name: Build WeChat LiquidGlass Dylibs v1.0-1
+
+on:
+  workflow_dispatch:
+    inputs:
+      headerpad_hex:
+        description: "Mach-O headerpad, e.g. 0x40000 or 0x80000"
+        required: false
+        default: "0x40000"
+  push:
+    branches: [ main, master ]
+    paths:
+      - "wcliquidglass27_project_v5/**"
+      - "wclg27cleaner_project/**"
+      - ".github/workflows/build.yml"
+
+jobs:
+  build-dylib:
+    name: Build ${{ matrix.project }} dylib
+    runs-on: macos-latest
+    env:
+      HEADERPAD_HEX: ${{ github.event.inputs.headerpad_hex || '0x40000' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: wcliquidglass27_project_v5
+            dylib: wcliquidglass27.dylib
+            plist: wcliquidglass27.plist
+          - project: wclg27cleaner_project
+            dylib: wclg27cleaner.dylib
+            plist: wclg27cleaner.plist
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        shell: bash
+        run: |
+          set -e
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
+          xcodebuild -version
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -e
+          brew update
+          brew install make ldid
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install Theos
+        shell: bash
+        run: |
+          set -e
+          git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+          echo "$HOME/theos/bin" >> "$GITHUB_PATH"
+
+      - name: Build release dylib
+        shell: bash
+        run: |
+          set -e
+          cd "${{ matrix.project }}"
+          make clean || true
+          make FINALPACKAGE=1 DEBUG=0 HEADERPAD_HEX="$HEADERPAD_HEX"
+
+      - name: Collect real dylib outputs
+        shell: bash
+        run: |
+          set -e
+          OUT="artifacts/${{ matrix.project }}-dylib"
+          mkdir -p "$OUT"
+
+          echo "Headerpad used: $HEADERPAD_HEX"
+          echo "Searching real dylib candidates..."
+          find "${{ matrix.project }}/.theos" -type f -name "${{ matrix.dylib }}" \
+            ! -path "*.dSYM/*" \
+            ! -path "*/DWARF/*" \
+            -print
+
+          REAL_DYLIB=""
+          while IFS= read -r f; do
+            INFO="$(file "$f")"
+            echo "$INFO"
+            if echo "$INFO" | grep -qi "dynamically linked shared library"; then
+              REAL_DYLIB="$f"
+              break
+            fi
+          done < <(find "${{ matrix.project }}/.theos" -type f -name "${{ matrix.dylib }}" \
+                    ! -path "*.dSYM/*" \
+                    ! -path "*/DWARF/*" \
+                    -print)
+
+          if [ -z "$REAL_DYLIB" ]; then
+            echo "ERROR: real dylib not found. Refusing to upload dSYM companion file."
+            exit 1
+          fi
+
+          cp "$REAL_DYLIB" "$OUT/${{ matrix.dylib }}"
+          cp "${{ matrix.project }}/${{ matrix.plist }}" "$OUT/" || true
+
+          echo "Selected dylib:"
+          file "$OUT/${{ matrix.dylib }}"
+          echo "Output files:"
+          ls -lah "$OUT"
+
+      - name: Upload dylib artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.project }}-dylib
+          path: artifacts/${{ matrix.project }}-dylib
+          if-no-files-found: error
