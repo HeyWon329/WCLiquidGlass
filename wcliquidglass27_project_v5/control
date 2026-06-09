@@ -1,0 +1,9 @@
+Package: com.hmz.wcliquidglass27
+Name: WCLiquidGlass27
+Version: 1.0-1
+Architecture: iphoneos-arm64
+Description: Clean-room WeChat Liquid Glass style UI tweak for iOS 26 and iOS 27, without authorization or network verification code.
+Maintainer: hmz
+Author: hmz
+Section: Tweaks
+Depends: mobilesubstrate, firmware (>= 15.0)
