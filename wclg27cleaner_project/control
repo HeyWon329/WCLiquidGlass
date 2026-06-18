@@ -1,9 +1,0 @@
-Package: com.hmz.wclg27cleaner
-Name: LiquidGlass Config Cleaner
-Version: 1.0-1
-Architecture: iphoneos-arm64
-Description: Separate rescue plugin to clean wcliquidglass27 preferences.
-Maintainer: hmz
-Author: hmz
-Section: Tweaks
-Depends: mobilesubstrate
